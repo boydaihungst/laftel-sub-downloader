@@ -26,7 +26,7 @@ Tested on linux.
     -s, --season SEASON       Set the season number
     -o, --output DIRECTORY    Specify the output Directory
     -l, --lang LANGUAGE       Set the language
-    -n, --newest              Use newest version
+    -n, --newest              Download only the latest episode
 
   Options (search):
     -q, --query TEXT          Search query (Required)

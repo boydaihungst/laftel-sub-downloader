@@ -378,7 +378,7 @@ usage() {
   echo "  -s, --season SEASON       Set the season number"
   echo "  -o, --output DIRECTORY    Specify the output Directory"
   echo "  -l, --lang LANGUAGE       Set the language"
-  echo "  -n, --newest              Use newest version"
+  echo "  -n, --newest              Download only the latest episode"
   echo ""
   echo "Options (search):"
   echo "  -q, --query TEXT          Search query (Required)"
