@@ -15,6 +15,10 @@ join_path() {
   echo "${base}${sep}${sub}"
 }
 
+is_valid_json() {
+  echo "$1" | jq empty >/dev/null 2>&1
+}
+
 http_get() {
   curl -s "$1"
 }
@@ -89,7 +93,11 @@ get_available_sub_lang() {
   SEASON_ID="${2}"
   URL="https://api.laftel.tv/v1.0/series/${SERIES_ID}/banner/?streaming_type=dash&season_id=${SEASON_ID}"
   response_banner_sub=$(http_get "$URL")
-  echo "$response_banner_sub" | jq -r '.highlight_video.subtitles[].language_code'
+  if is_valid_json "$response_banner_sub"; then
+    echo "$response_banner_sub" | jq -r '.highlight_video.subtitles[].language_code'
+  else
+    echo '[]' | jq .
+  fi
 }
 
 get_sub_old_series() {
@@ -98,10 +106,14 @@ get_sub_old_series() {
   LANGUAGE="${3}"
   URL="https://api.laftel.tv/v1.0/series/${SERIES_ID}/banner/?streaming_type=dash&season_id=${SEASON_ID}"
   response_banner=$(http_get "$URL")
-  if [[ -n "$LANGUAGE" ]]; then
-    echo "$response_banner" | jq -r "[.highlight_video.subtitles[] | select(.language_code == \"${LANGUAGE}\")]"
+  if is_valid_json "$response_banner_sub"; then
+    if [[ -n "$LANGUAGE" ]]; then
+      echo "$response_banner" | jq -r "[.highlight_video.subtitles[] | select(.language_code == \"${LANGUAGE}\")]"
+    else
+      echo "$response_banner" | jq -r ".highlight_video.subtitles"
+    fi
   else
-    echo "$response_banner" | jq -r ".highlight_video.subtitles"
+    echo '[]' | jq .
   fi
 }
 
@@ -119,11 +131,17 @@ get_seasons_id() {
   SEASON_NUM=$2
   URL="https://api.laftel.tv/v1.0/seasons/?series_id=${SERIES_ID}"
   response_seasons=$(http_get "$URL")
-  if [[ -n "$SEASON_NUM" ]]; then
-    echo "$response_seasons" | jq -c ".[] | select(.index == \"${SEASON_NUM:-1}\")"
+  if is_valid_json "$response_banner_sub"; then
+
+    if [[ -n "$SEASON_NUM" ]]; then
+      echo "$response_seasons" | jq -c ".[] | select(.index == \"${SEASON_NUM:-1}\")"
+    else
+      echo "$response_seasons" | jq -c ".[]"
+    fi
   else
-    echo "$response_seasons" | jq -c ".[]"
+    echo '[]' | jq .
   fi
+
 }
 
 #######################################
@@ -229,8 +247,13 @@ download_sub() {
     mapfile -t available_langs < <(get_available_sub_lang "$SERIES_ID" "$SEASON_ID")
     # Ensure the array is not empty
     if [[ ${#available_langs[@]} -eq 0 ]]; then
-      echo "No languages available."
-      continue
+      if ! $FORCE_LANGUAGE; then
+        echo "No languages available. Force select any language with -f and -l arguments"
+        continue
+      else
+        available_langs+=("$LANGUAGE")
+        echo "Force selected $LANGUAGE language"
+      fi
     else
       echo "Available languages: ${available_langs[@]}"
     fi
@@ -359,6 +382,7 @@ ID=
 SEASON=
 OUTPUT="$(pwd)"
 LANGUAGE=""
+FORCE_LANGUAGE=false
 NEWEST=false
 ACTION=""
 QUERY=""
@@ -378,6 +402,7 @@ usage() {
   echo "  -s, --season SEASON       Set the season number"
   echo "  -o, --output DIRECTORY    Specify the output Directory"
   echo "  -l, --lang LANGUAGE       Set the language"
+  echo "  -f, --force               Force to download even if available languages shows \"No languages available\""
   echo "  -n, --newest              Download only the latest episode"
   echo ""
   echo "Options (search):"
@@ -393,7 +418,7 @@ usage() {
 }
 
 # Parse arguments using getopt
-OPTIONS=$(getopt -o i:s:o:l:nq:L:h --long id:,season:,output:,lang:,newest,query:,limit:,help -- "$@")
+OPTIONS=$(getopt -o i:s:o:l:fnq:L:h --long id:,season:,output:,lang:,force,newest,query:,limit:,help -- "$@")
 if [[ $? -ne 0 ]]; then
   echo "Error: Invalid options" >&2
   usage
@@ -425,6 +450,10 @@ while [[ $# -gt 0 ]]; do
   -l | --lang)
     LANGUAGE="$2"
     shift 2
+    ;;
+  -f | --force)
+    FORCE_LANGUAGE=true
+    shift
     ;;
   -n | --newest)
     NEWEST=true

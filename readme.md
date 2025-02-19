@@ -26,6 +26,7 @@ Tested on linux.
     -s, --season SEASON       Set the season number
     -o, --output DIRECTORY    Specify the output Directory
     -l, --lang LANGUAGE       Set the language
+    -f, --force               Force to download even if available languages shows "No languages available"
     -n, --newest              Download only the latest episode
 
   Options (search):
