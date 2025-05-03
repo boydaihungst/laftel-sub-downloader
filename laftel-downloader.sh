@@ -2,6 +2,12 @@
 
 # Requirements: jq curl
 
+FFMPEG_EXIST=true
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "ffmpeg is not installed"
+  FFMPEG_EXIST=false
+fi
+
 join_path() {
   if [[ "$OS" == "Windows_NT" ]]; then
     sep="\\"
@@ -17,6 +23,16 @@ join_path() {
 
 is_valid_json() {
   echo "$1" | jq empty >/dev/null 2>&1
+}
+
+convert_vtt_to_srt() {
+  if $FFMPEG_EXIST; then
+    output_srt="$(echo "$1" | sed -E 's/\.vtt$/.srt/')"
+    ffmpeg -y -nostdin -loglevel error -i "$1" "$output_srt"
+    if [[ -f "$1" ]]; then
+      rm "$1"
+    fi
+  fi
 }
 
 http_get() {
@@ -125,15 +141,19 @@ get_sub_old_series() {
 # Arguments:
 #   1 - SERIES_ID string|number
 #   2 - SEASON_NUM string|number
+#   3 - LAST_EPISODE_ONLY boolean (optional)
 #######################################
 get_seasons_id() {
   SERIES_ID=$1
   SEASON_NUM=$2
+  LAST_EPISODE_ONLY=$3
   URL="https://api.laftel.tv/v1.0/seasons/?series_id=${SERIES_ID}"
   response_seasons=$(http_get "$URL")
   if is_valid_json "$response_banner_sub"; then
 
-    if [[ -n "$SEASON_NUM" ]]; then
+    if $LAST_EPISODE_ONLY; then
+      echo "$response_seasons" | jq -c ". | max_by(.id)"
+    elif [[ -n "$SEASON_NUM" ]]; then
       echo "$response_seasons" | jq -c ".[] | select(.index == \"${SEASON_NUM:-1}\")"
     else
       echo "$response_seasons" | jq -c ".[]"
@@ -192,7 +212,7 @@ download_sub() {
   OPTIONS=$(getopt -o i:s:o:l:n --long id:,season:,output:,lang:,newest -- "$@")
   eval set -- "$OPTIONS"
 
-  OUTPUT=$(pwd)
+  OUTPUT=
   LAST_EPISODE_ONLY=false
   LANGUAGE=
 
@@ -215,7 +235,7 @@ download_sub() {
         echo "ERROR: OUTPUT should be a directory!"
         exit 1
       fi
-      OUTPUT="${2:-"$(pwd)"}"
+      OUTPUT="$2"
       shift 2
       ;;
     -l | --lang)
@@ -285,6 +305,10 @@ download_sub() {
       fi
     fi
 
+    if [[ -n "$OUTPUT" ]]; then
+      OUTPUT="$(join_path "$(pwd)" "$SEASON_TITLE")"
+      mkdir -p "$OUTPUT"
+    fi
     while read -r ep; do
       unset sub_dl_url
       ep_id=$(echo "$ep" | jq -r '.id')
@@ -303,13 +327,15 @@ download_sub() {
           for l in "${available_langs[@]}"; do
             dir_path="$(realpath "$(join_path "$OUTPUT" "$l")")"
             mkdir -p "$dir_path"
-            curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").vtt" "${sub_dl_url}${l}.vtt"
+            curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").$l.vtt" "${sub_dl_url}${l}.vtt"
+            convert_vtt_to_srt "$(join_path "$(realpath "$dir_path")" "$ep_fname").$l.vtt"
             echo "$ep_fname($l): 100%"
           done
         else
           dir_path="$(realpath "$(join_path "$OUTPUT" "$LANGUAGE")")"
           mkdir -p "$dir_path"
-          curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").vtt" "${sub_dl_url}${LANGUAGE}.vtt"
+          curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").$LANGUAGE.vtt" "${sub_dl_url}${LANGUAGE}.vtt"
+          convert_vtt_to_srt "$(join_path "$(realpath "$dir_path")" "$ep_fname").$LANGUAGE.vtt"
           echo "$ep_fname($LANGUAGE): 100%"
         fi
         ;;
@@ -327,13 +353,15 @@ download_sub() {
           for l in "${available_langs[@]}"; do
             dir_path="$(realpath "$(join_path "$OUTPUT" "$l")")"
             mkdir -p "$dir_path"
-            curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").vtt" "${sub_dl_url}${l}.vtt"
+            curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").$l.vtt" "${sub_dl_url}${l}.vtt"
+            convert_vtt_to_srt "$(join_path "$(realpath "$dir_path")" "$ep_fname").$l.vtt"
             echo "$ep_fname($l): 100%"
           done
         else
           dir_path="$(realpath "$(join_path "$OUTPUT" "$LANGUAGE")")"
           mkdir -p "$dir_path"
-          curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").vtt" "${sub_dl_url}${LANGUAGE}.vtt"
+          curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").$LANGUAGE.vtt" "${sub_dl_url}${LANGUAGE}.vtt"
+          convert_vtt_to_srt "$(join_path "$(realpath "$dir_path")" "$ep_fname").$LANGUAGE.vtt"
           echo "$ep_fname($LANGUAGE): 100%"
         fi
         ;;
@@ -359,13 +387,15 @@ download_sub() {
           for l in "${available_langs[@]}"; do
             dir_path="$(realpath "$(join_path "$OUTPUT" "$l")")"
             mkdir -p "$dir_path"
-            curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").vtt" "${sub_dl_url}${l}.vtt"
+            curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").$l.vtt" "${sub_dl_url}${l}.vtt"
+            convert_vtt_to_srt "$(join_path "$(realpath "$dir_path")" "$ep_fname").$l.vtt"
             echo "$ep_fname($l): 100%"
           done
         else
           dir_path="$(realpath "$(join_path "$OUTPUT" "$LANGUAGE")")"
           mkdir -p "$dir_path"
-          curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").vtt" "${sub_dl_url}${LANGUAGE}.vtt"
+          curl -s -o "$(join_path "$(realpath "$dir_path")" "$ep_fname").$LANGUAGE.vtt" "${sub_dl_url}${LANGUAGE}.vtt"
+          convert_vtt_to_srt "$(join_path "$(realpath "$dir_path")" "$ep_fname").$LANGUAGE.vtt"
           echo "$ep_fname($LANGUAGE): 100%"
         fi
         last_ep_id=$ep_id
@@ -374,7 +404,7 @@ download_sub() {
         ;;
       esac
     done < <(echo "$res_eps" | jq -c '.results[]')
-  done < <(get_seasons_id "$SERIES_ID" "$SEASON_NUM")
+  done < <(get_seasons_id "$SERIES_ID" "$SEASON_NUM" $LAST_EPISODE_ONLY)
 }
 
 # Default values
